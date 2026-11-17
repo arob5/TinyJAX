@@ -5,6 +5,11 @@ of Andrej Karpathy's [micrograd](https://github.com/karpathy/micrograd), this re
 JAX-like library. 
 
 
-## Related resources
+## Resources
+
+### Related
 - [Autodidax](https://docs.jax.dev/en/latest/autodidax.html)
 - [MicroJAX](https://huggingface.co/blog/joey00072/microjax)
+
+### Other
+- [Elements of differentiable programming](https://diffprog.github.io/)
