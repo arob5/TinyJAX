@@ -1,3 +1,14 @@
+"""
+JAX works by defining a set of primitive operations (these operations are
+chosen, more or less, as those making up the numpy API). Of course, we 
+want to be able to evaluate these operations. However, in certain contexts
+we want to interpret them in other ways: as their Jacobian-vector product, 
+or as their batched/vectorized form. JAX calls such an interpreter a 
+"trace", and the current trace is managed by a context manager. When a 
+primitive operation is requested, the primitive is handed to current trace
+to interpret it (which might mean evaluating it, computing its Jacobian-vector
+product, etc.)
+"""
 from __future__ import annotations
 from typing import Any, Callable
 from contextlib import contextmanager
