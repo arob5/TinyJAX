@@ -1,11 +1,11 @@
 """
-JAX works by defining a set of primitive operations (these operations are
-chosen, more or less, as those making up the numpy API). Of course, we 
-want to be able to evaluate these operations. However, in certain contexts
-we want to interpret them in other ways: as their Jacobian-vector product, 
-or as their batched/vectorized form. JAX calls such an interpreter a 
+JAX works by defining a small set of primitive operations (add, multiply, etc.). 
+Of course, we want to be able to evaluate these operations. However, in certain 
+contexts we want to interpret them in other ways: as their Jacobian-vector 
+product, or as their batched/vectorized form, or to stage them into a compiled 
+program (the basis of JIT compilation). JAX calls such an interpreter a 
 "trace", and the current trace is managed by a context manager. When a 
-primitive operation is requested, the primitive is handed to current trace
+primitive operation is requested, the primitive is handed to the current trace
 to interpret it (which might mean evaluating it, computing its Jacobian-vector
 product, etc.)
 """
@@ -13,17 +13,29 @@ from __future__ import annotations
 from typing import Any, Callable
 from contextlib import contextmanager
 
+
 class Primitive:
     """A primitive operation
 
-    Rule tables are keyed by primitive objects. Two primitives with the same 
-    name are different primitives; comparison is by identity. 
+    Defined by its name and implementation, the function used to evaluate it.
+    Two primitives with the same name are different primitives; comparison is 
+    by identity. 
     """
     def __init__(self, name: str):
         self.name = name
+        self.impl: Callable|None = None
 
     def __repr__(self):
         return self.name
+
+    def def_impl(self, rule: Callable) -> Callable:
+        """ Setter for implementation rule
+
+        The rule is the evaluation rule defining the primitive. This can
+        be used as a decorator.
+        """
+        self.impl = rule
+        return rule
 
     def bind(self, *args, **params):
         """ Single entry point for interpreting an operation
@@ -31,9 +43,6 @@ class Primitive:
         The operation is interpreted by the current trace.
         """
         return get_current_trace().process_primitive(self, args, params)
-
-
-impl_rules: dict[Primitive, Callable] = {}
 
 
 class Trace:
@@ -53,13 +62,17 @@ class EvalTrace(Trace):
     """ Evaluation interpreter
 
     Evaluates primitives on numpy arrays at the bottom of the trace chain.
+
+    Difference from JAX: In JAX, the impl for most primitives compiles that 
+    operation with XLA. This is why a first call to a primitive in JAX will
+    be slower than future calls. We don't implement XLA compilation here.
     """
 
     def process_primitive(self, 
                           primitive: Primitive, 
                           args: tuple[Any, ...], 
                           params: dict[str, Any]):
-        rule = impl_rules.get(primitive)
+        rule = primitive.impl
         if rule is None:
             raise NotImplementedError(f"no impl rule for {primitive}")
         else: 
@@ -68,8 +81,10 @@ class EvalTrace(Trace):
 
 current_trace: Trace = EvalTrace()
 
+
 def get_current_trace() -> Trace:
     return current_trace
+
 
 @contextmanager
 def set_current_trace(trace: Trace):
