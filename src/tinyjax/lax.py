@@ -1,5 +1,12 @@
+"""
+Differences from JAX to note:
+- on integer inputs, jax.lax.div does integer division that rounds toward zero, while np.divide always returns floats.
+- JAX allows some limited broadcasting in lax
+"""
 from __future__ import annotations
 import numpy as np
+from collections.abc import Iterable
+from itertools import pairwise
 
 from .core import Primitive
 
@@ -83,7 +90,51 @@ def div(x, y):
     return div_p.bind(x, y)
 
 
-def _assert_equal_shapes_dtypes(x, y, primitive):
+greater_p = Primitive('greater')
+
+@greater_p.def_impl
+def _greater_impl(x, y):
+    _assert_equal_shapes_dtypes(x, y, greater_p)
+    return np.greater(x, y)
+
+def greater(x, y):
+    return greater_p.bind(x, y)
+
+
+reduce_sum_p = Primitive('reduce_sum')
+
+@reduce_sum_p.def_impl
+def _reduce_sum_impl(x, *, axes: tuple[int, ...]):
+    return np.sum(x, axis=axes)
+
+def reduce_sum(x, axes: Iterable[int]):
+    return reduce_sum_p.bind(x, axes=tuple(axes))
+
+
+broadcast_in_dim_p = Primitive('broadcast_in_dim')
+
+@broadcast_in_dim_p.def_impl
+def _broadcast_in_dim_impl(x, *, 
+                           shape: tuple[int, ...], 
+                           broadcast_dimensions: tuple[int, ...]):
+    x = np.asarray(x)
+    _check_broadcast_dimensions(x, shape, broadcast_dimensions)
+    extended_shape = [1 for i in range(len(shape))]
+    
+    for i in range(x.ndim):
+        extended_shape[broadcast_dimensions[i]] = x.shape[i]
+    return np.broadcast_to(x.reshape(extended_shape), shape)
+
+
+def broadcast_in_dim(x, 
+                     shape: Iterable[int], 
+                     broadcast_dimensions: Iterable[int]):
+    return broadcast_in_dim_p.bind(x, shape=tuple(shape), 
+                                   broadcast_dimensions=tuple(broadcast_dimensions))
+
+# ------------------------------------- helpers -------------------------------
+
+def _assert_equal_shapes_dtypes(x, y, primitive: Primitive):
     x = np.asarray(x)
     y = np.asarray(y)
 
@@ -94,4 +145,24 @@ def _assert_equal_shapes_dtypes(x, y, primitive):
     if x.shape != y.shape:
         raise TypeError(f'x shape {x.shape} and y shape {y.shape}'
                         f' disagree in primitive {primitive.name}')
-    
+
+
+def _check_broadcast_dimensions(x, shape: tuple[int, ...], 
+                                broadcast_dimensions: tuple[int, ...]):
+
+    if x.ndim != len(broadcast_dimensions):
+        raise ValueError(f'broadcast_dimensions must have same length as x.ndim'
+                         f' for primitive {broadcast_in_dim_p.name}')
+
+    if any(dim < 0 for dim in broadcast_dimensions):
+        raise ValueError(f'broadcast_dimensions cannot have negative entries'
+                         f' for primitive {broadcast_in_dim_p.name}')
+
+    if any(dim > len(shape) - 1 for dim in broadcast_dimensions):
+        raise ValueError(f'broadcast_dimensions[i] cannot exceed `len(shape)`'
+                         f' for primitive {broadcast_in_dim_p.name}')
+
+    if not all(a < b for a, b in pairwise(broadcast_dimensions)):
+        raise ValueError(f'broadcast_dimensions tuple must be strictly'
+                         f' increasing for primitive {broadcast_in_dim_p.name}')
+
