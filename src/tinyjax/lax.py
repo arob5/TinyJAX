@@ -5,6 +5,7 @@ Differences from JAX to note:
 """
 from __future__ import annotations
 import numpy as np
+import numpy.typing as npt
 from collections.abc import Iterable
 from itertools import pairwise
 
@@ -132,6 +133,27 @@ def broadcast_in_dim(x,
     return broadcast_in_dim_p.bind(x, shape=tuple(shape), 
                                    broadcast_dimensions=tuple(broadcast_dimensions))
 
+
+transpose_p = Primitive('transpose')
+
+@transpose_p.def_impl
+def _transpose_impl(x, *, permutation: tuple[int, ...]):
+    return np.transpose(x, axes=permutation)
+
+def transpose(x, permutation: Iterable[int]):
+    return transpose_p.bind(x, permutation=tuple(permutation))
+
+
+convert_element_type_p = Primitive('convert_element_type')
+
+@convert_element_type_p.def_impl
+def _convert_element_type_impl(x, *, new_dtype):
+    return np.asarray(x).astype(new_dtype)
+
+def convert_element_type(x, new_dtype: npt.DTypeLike):
+    return convert_element_type_p.bind(x, new_dtype=np.dtype(new_dtype))
+
+
 # ------------------------------------- helpers -------------------------------
 
 def _assert_equal_shapes_dtypes(x, y, primitive: Primitive):
@@ -159,7 +181,7 @@ def _check_broadcast_dimensions(x, shape: tuple[int, ...],
                          f' for primitive {broadcast_in_dim_p.name}')
 
     if any(dim > len(shape) - 1 for dim in broadcast_dimensions):
-        raise ValueError(f'broadcast_dimensions[i] cannot exceed `len(shape)`'
+        raise ValueError(f'broadcast_dimensions[i] must be less than `len(shape)`'
                          f' for primitive {broadcast_in_dim_p.name}')
 
     if not all(a < b for a, b in pairwise(broadcast_dimensions)):
