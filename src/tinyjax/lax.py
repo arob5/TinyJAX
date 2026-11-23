@@ -130,6 +130,10 @@ def _broadcast_in_dim_impl(x, *,
 def broadcast_in_dim(x, 
                      shape: Iterable[int], 
                      broadcast_dimensions: Iterable[int]):
+    """
+    broadcast_dimensions says which output axis each of x's axes 
+    lands in.
+    """
     return broadcast_in_dim_p.bind(x, shape=tuple(shape), 
                                    broadcast_dimensions=tuple(broadcast_dimensions))
 
